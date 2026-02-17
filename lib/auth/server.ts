@@ -1,8 +1,10 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import type { AppPermission, AppRoleKey } from "@/lib/auth/permissions";
-import { hasPermission, isAppRoleKey } from "@/lib/auth/permissions";
+import { hasPermission, normalizeRoleKey } from "@/lib/auth/permissions";
+import { ensureProvisionedAppUser } from "@/lib/auth/provision";
 import { prisma } from "@/lib/prisma";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -38,7 +40,7 @@ async function findAppUserByAuthId(userId: string) {
   });
 }
 
-export async function getAppSession(): Promise<AppSession | null> {
+export const getAppSession = cache(async (): Promise<AppSession | null> => {
   const supabase = await getServerSupabaseClient();
   const {
     data: { user },
@@ -47,6 +49,10 @@ export async function getAppSession(): Promise<AppSession | null> {
   if (!user) {
     return null;
   }
+  const metadataRoleRaw = user.user_metadata?.app_role;
+  const metadataRole = normalizeRoleKey(
+    typeof metadataRoleRaw === "string" ? metadataRoleRaw : null,
+  );
 
   let appUser:
     | {
@@ -67,8 +73,17 @@ export async function getAppSession(): Promise<AppSession | null> {
       return {
         authUser: user,
         appUser: null,
-        roleKeys: [],
+        roleKeys: [metadataRole || "employee"],
       };
+    }
+  }
+
+  if (!appUser && user.email) {
+    try {
+      await ensureProvisionedAppUser(user.id, user.email, metadataRole || "employee");
+      appUser = await findAppUserByAuthId(user.id);
+    } catch {
+      // keep fallback behavior below
     }
   }
 
@@ -76,13 +91,36 @@ export async function getAppSession(): Promise<AppSession | null> {
     return {
       authUser: user,
       appUser: null,
-      roleKeys: [],
+      roleKeys: [metadataRole || "employee"],
     };
   }
 
-  const roleKeys = appUser.userRoles
-    .map((entry) => entry.role.key)
-    .filter((roleKey): roleKey is AppRoleKey => isAppRoleKey(roleKey));
+  let roleKeys = appUser.userRoles
+    .map((entry) => normalizeRoleKey(entry.role.key))
+    .filter((roleKey): roleKey is AppRoleKey => !!roleKey);
+
+  // Self-heal role assignment if user exists in app DB but has no mapped role.
+  if (roleKeys.length === 0 && user.email) {
+    try {
+      await ensureProvisionedAppUser(user.id, user.email, metadataRole || "employee");
+      const refreshedUser = await findAppUserByAuthId(user.id);
+      if (refreshedUser) {
+        appUser = refreshedUser;
+        roleKeys = refreshedUser.userRoles
+          .map((entry) => normalizeRoleKey(entry.role.key))
+          .filter((roleKey): roleKey is AppRoleKey => !!roleKey);
+      }
+    } catch {
+      // keep graceful fallback below
+    }
+  }
+
+  if (roleKeys.length === 0 && metadataRole) {
+    roleKeys = [metadataRole];
+  }
+  if (roleKeys.length === 0) {
+    roleKeys = ["employee"];
+  }
 
   return {
     authUser: user,
@@ -93,7 +131,7 @@ export async function getAppSession(): Promise<AppSession | null> {
     },
     roleKeys,
   };
-}
+});
 
 export async function requirePageSession(): Promise<AppSession> {
   const session = await getAppSession();

@@ -1,9 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
-import { isAppRoleKey } from "@/lib/auth/permissions";
+import { normalizeRoleKey } from "@/lib/auth/permissions";
 import { ensureProvisionedAppUser } from "@/lib/auth/provision";
+import { getServerEnv } from "@/lib/env/server";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
 
 function getStringValue(formData: FormData, key: string) {
@@ -16,7 +18,11 @@ export async function login(formData: FormData) {
   const password = getStringValue(formData, "password");
   const nextPath = getStringValue(formData, "next") || "/dashboard";
   const requestedRole = getStringValue(formData, "testRole");
-  const selectedRole = isAppRoleKey(requestedRole) ? requestedRole : undefined;
+  const normalizedRole = normalizeRoleKey(requestedRole);
+  const selectedRole =
+    normalizedRole === "hr_admin" || normalizedRole === "employee"
+      ? normalizedRole
+      : "employee";
 
   if (!email || !password) {
     redirect("/login?error=missing_credentials");
@@ -34,6 +40,29 @@ export async function login(formData: FormData) {
 
   if (data.user?.id && data.user.email) {
     await ensureProvisionedAppUser(data.user.id, data.user.email, selectedRole);
+    const metadataUpdate = await supabase.auth.updateUser({
+      data: {
+        app_role: selectedRole,
+      },
+    });
+
+    // Fallback: if session-bound update fails, patch metadata through service-role admin API.
+    if (metadataUpdate.error) {
+      const serverEnv = getServerEnv();
+      if (serverEnv.SUPABASE_SERVICE_ROLE_KEY) {
+        const admin = createClient(
+          serverEnv.NEXT_PUBLIC_SUPABASE_URL,
+          serverEnv.SUPABASE_SERVICE_ROLE_KEY,
+          { auth: { persistSession: false, autoRefreshToken: false } },
+        );
+        await admin.auth.admin.updateUserById(data.user.id, {
+          user_metadata: {
+            ...(data.user.user_metadata || {}),
+            app_role: selectedRole,
+          },
+        });
+      }
+    }
   }
 
   redirect(nextPath);
