@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { login } from "@/app/actions/auth";
-import { APP_ROLES } from "@/lib/auth/permissions";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -15,14 +14,10 @@ const errorMessages: Record<string, string> = {
   invalid_credentials: "Invalid email or password.",
   missing_credentials: "Email and password are required.",
 };
-const roleLabels: Record<(typeof APP_ROLES)[number], string> = {
-  super_admin: "Super Admin",
-  hr_admin: "HR Admin",
-  payroll_manager: "Payroll Manager",
-  manager: "Manager",
-  employee: "Employee",
-  auditor: "Auditor",
-};
+const LOGIN_TEST_ROLES = [
+  { key: "hr_admin", label: "HR Admin" },
+  { key: "employee", label: "Employee" },
+] as const;
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
@@ -37,7 +32,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-6">
       <h1 className="mb-2 text-2xl font-semibold text-zinc-900">Sign in</h1>
       <p className="mb-6 text-sm text-zinc-600">
-        Use your Supabase Auth account to access the PMO-FC dashboard.
+        Use your Supabase Auth account to access the HR platform dashboard.
       </p>
 
       {errorMessage ? (
@@ -81,12 +76,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <select
           id="testRole"
           name="testRole"
-          defaultValue="employee"
+          defaultValue="hr_admin"
           className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
         >
-          {APP_ROLES.map((role) => (
-            <option key={role} value={role}>
-              {roleLabels[role]}
+          {LOGIN_TEST_ROLES.map((role) => (
+            <option key={role.key} value={role.key}>
+              {role.label}
             </option>
           ))}
         </select>

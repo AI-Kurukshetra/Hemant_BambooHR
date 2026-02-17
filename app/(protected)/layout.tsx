@@ -10,7 +10,13 @@ const NAV_ITEMS = [
   { href: "/dashboard/employees", label: "Employees", permission: "employee:read" as const },
   { href: "/dashboard/leaves", label: "Leaves", permission: "leave:request:read:self" as const },
   { href: "/dashboard/payroll", label: "Payroll", permission: "payroll:run:read" as const },
+  { href: "/dashboard/audits", label: "Audit Logs", permission: "audit:read" as const },
 ];
+
+const ROLE_LABELS: Record<string, string> = {
+  hr_admin: "HR Admin",
+  employee: "Employee",
+};
 
 export default async function ProtectedLayout({
   children,
@@ -27,6 +33,8 @@ export default async function ProtectedLayout({
     }
     return hasPermission(session.roleKeys, item.permission);
   });
+  const activeRole = session.roleKeys[0];
+  const roleLabel = activeRole ? ROLE_LABELS[activeRole] || activeRole : "Unassigned";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -37,7 +45,12 @@ export default async function ProtectedLayout({
             <h1 className="text-lg font-semibold text-slate-900">HR Platform</h1>
           </div>
           <div className="flex items-center gap-3">
-            <p className="hidden text-sm text-slate-600 sm:block">{session.authUser.email}</p>
+            <div className="hidden text-right sm:block">
+              <p className="text-sm text-slate-600">{session.authUser.email}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                {roleLabel}
+              </p>
+            </div>
             <LogoutButton />
           </div>
         </div>

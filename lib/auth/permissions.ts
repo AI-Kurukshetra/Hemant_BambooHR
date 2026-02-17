@@ -1,10 +1,6 @@
 export const APP_ROLES = [
-  "super_admin",
   "hr_admin",
-  "payroll_manager",
-  "manager",
   "employee",
-  "auditor",
 ] as const;
 
 export type AppRoleKey = (typeof APP_ROLES)[number];
@@ -41,8 +37,28 @@ export function isAppRoleKey(value: string): value is AppRoleKey {
   return APP_ROLE_SET.has(value);
 }
 
+const ROLE_ALIASES: Record<string, AppRoleKey> = {
+  hr_manager: "hr_admin",
+  admin: "hr_admin",
+  super_admin: "hr_admin",
+  payroll_manager: "hr_admin",
+  manager: "employee",
+  auditor: "employee",
+  "hr admin": "hr_admin",
+};
+
+export function normalizeRoleKey(value: string | null | undefined): AppRoleKey | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (isAppRoleKey(normalized)) {
+    return normalized;
+  }
+  return ROLE_ALIASES[normalized] || null;
+}
+
 export const ROLE_PERMISSIONS: Record<AppRoleKey, readonly AppPermission[]> = {
-  super_admin: [...PERMISSIONS],
   hr_admin: [
     "employee:read",
     "employee:create",
@@ -61,30 +77,6 @@ export const ROLE_PERMISSIONS: Record<AppRoleKey, readonly AppPermission[]> = {
     "payroll:run:read",
     "audit:read",
   ],
-  payroll_manager: [
-    "employee:read",
-    "employee:document:read",
-    "leave:request:read:team",
-    "leave:balance:read:team",
-    "payroll:config:read",
-    "payroll:config:manage",
-    "payroll:run:read",
-    "payroll:run:manage",
-    "payroll:payslip:publish",
-    "audit:read",
-  ],
-  manager: [
-    "employee:read",
-    "employee:document:read",
-    "leave:request:create",
-    "leave:request:read:self",
-    "leave:request:read:team",
-    "leave:request:approve",
-    "leave:balance:read:self",
-    "leave:balance:read:team",
-    "payroll:run:read",
-    "payroll:payslip:read:self",
-  ],
   employee: [
     "employee:read",
     "employee:update",
@@ -94,16 +86,6 @@ export const ROLE_PERMISSIONS: Record<AppRoleKey, readonly AppPermission[]> = {
     "leave:request:read:self",
     "leave:balance:read:self",
     "payroll:payslip:read:self",
-  ],
-  auditor: [
-    "employee:read",
-    "employee:document:read",
-    "leave:policy:read",
-    "leave:request:read:team",
-    "leave:balance:read:team",
-    "payroll:config:read",
-    "payroll:run:read",
-    "audit:read",
   ],
 };
 

@@ -4,34 +4,14 @@ const prisma = new PrismaClient();
 
 const ROLE_DEFINITIONS = [
   {
-    key: "super_admin",
-    name: "Super Admin",
-    description: "Full tenant control, role assignment, and unrestricted access.",
-  },
-  {
     key: "hr_admin",
     name: "HR Admin",
     description: "Manages employee records, documents, leave policies, and approvals.",
   },
   {
-    key: "payroll_manager",
-    name: "Payroll Manager",
-    description: "Manages payroll setup, payroll cycles, and payslip publishing.",
-  },
-  {
-    key: "manager",
-    name: "Manager",
-    description: "Manages direct reports and approves leave requests.",
-  },
-  {
     key: "employee",
     name: "Employee",
     description: "Self-service access to own profile, leave, and payslips.",
-  },
-  {
-    key: "auditor",
-    name: "Auditor",
-    description: "Read-only access to records and audit trails.",
   },
 ];
 

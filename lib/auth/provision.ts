@@ -3,29 +3,13 @@ import type { AppRoleKey } from "@/lib/auth/permissions";
 
 const DEFAULT_COMPANY_NAME = "Default Company";
 const ROLE_META: Record<AppRoleKey, { name: string; description: string }> = {
-  super_admin: {
-    name: "Super Admin",
-    description: "Full tenant control, role assignment, and unrestricted access.",
-  },
   hr_admin: {
     name: "HR Admin",
     description: "Manages employee records, documents, leave policies, and approvals.",
   },
-  payroll_manager: {
-    name: "Payroll Manager",
-    description: "Manages payroll setup, payroll cycles, and payslip publishing.",
-  },
-  manager: {
-    name: "Manager",
-    description: "Manages direct reports and approves leave requests.",
-  },
   employee: {
     name: "Employee",
     description: "Self-service access to own profile, leave, and payslips.",
-  },
-  auditor: {
-    name: "Auditor",
-    description: "Read-only access to records and audit trails.",
   },
 };
 
