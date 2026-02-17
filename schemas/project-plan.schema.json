@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PMO FC Project Plan",
+  "type": "object",
+  "required": [
+    "requirementSummary",
+    "moduleBreakdown",
+    "taskBreakdown",
+    "assumptions",
+    "dependencies",
+    "effortEstimates",
+    "unitTestCases",
+    "systemTestCases",
+    "regressionSuite",
+    "architectureOverview",
+    "mindMap",
+    "resourcePlan",
+    "sprintPlan",
+    "timeline"
+  ],
+  "properties": {
+    "requirementSummary": { "type": "string" },
+    "moduleBreakdown": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "taskBreakdown": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["module", "task", "owner", "estimateHours"],
+        "properties": {
+          "module": { "type": "string" },
+          "task": { "type": "string" },
+          "owner": { "type": "string" },
+          "estimateHours": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "effortEstimates": { "type": "object" },
+    "unitTestCases": { "type": "array" },
+    "systemTestCases": { "type": "array" },
+    "regressionSuite": { "type": "array" },
+    "architectureOverview": { "type": "object" },
+    "mindMap": { "type": "object" },
+    "resourcePlan": { "type": "array" },
+    "sprintPlan": { "type": "array" },
+    "timeline": { "type": "array" }
+  },
+  "additionalProperties": false
+}
+

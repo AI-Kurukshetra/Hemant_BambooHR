@@ -1,0 +1,615 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ProjectType {
+  fixed_cost
+}
+
+enum TeamModel {
+  small
+  medium
+  large
+}
+
+enum LeaveRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+enum LeaveApprovalDecision {
+  approved
+  rejected
+}
+
+enum PayrollCycleStatus {
+  draft
+  processing
+  finalized
+  published
+}
+
+enum PayrollRunStatus {
+  draft
+  processing
+  completed
+  failed
+  finalized
+}
+
+enum PayrollComponentType {
+  earning
+  deduction
+  tax
+}
+
+enum PayrollValueType {
+  fixed
+  percent
+}
+
+enum EmploymentStatus {
+  active
+  inactive
+  terminated
+  on_notice
+}
+
+model Project {
+  id                  String          @id @default(cuid())
+  name                String
+  clientName          String?         @map("client_name")
+  projectType         ProjectType     @default(fixed_cost) @map("project_type")
+  sprintDurationWeeks Int             @default(2) @map("sprint_duration_weeks")
+  startDateAssumption DateTime?       @map("start_date_assumption") @db.Date
+  teamModel           TeamModel       @map("team_model")
+  scopeText           String?         @map("scope_text")
+  techStack           Json            @map("tech_stack")
+  generatedOutputs    ProjectOutput[]
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  @@index([createdAt], map: "projects_created_at_idx")
+  @@map("projects")
+}
+
+model ProjectOutput {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  output    Json     @map("output_json")
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId], map: "project_outputs_project_id_idx")
+  @@map("project_outputs")
+}
+
+model Company {
+  id                String             @id @default(cuid())
+  name              String
+  users             AppUser[]
+  employees         Employee[]
+  roles             Role[]
+  userRoles         UserRole[]
+  leaveTypes        LeaveType[]
+  leavePolicies     LeavePolicy[]
+  holidayCalendars  HolidayCalendar[]
+  payrollCycles     PayrollCycle[]
+  payrollComponents PayrollComponent[]
+  payrollRuns       PayrollRun[]
+  auditLogs         AuditLog[]
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  @@map("companies")
+}
+
+model AppUser {
+  id                  String          @id @db.Uuid
+  companyId           String          @map("company_id")
+  email               String
+  firstName           String?         @map("first_name")
+  lastName            String?         @map("last_name")
+  isActive            Boolean         @default(true) @map("is_active")
+  employee            Employee?
+  leaveRequests       LeaveRequest[]  @relation("LeaveRequestRequestedBy")
+  leaveApprovals      LeaveApproval[]
+  payrollRunsHandled  PayrollRun[]    @relation("PayrollRunProcessedBy")
+  payrollCyclesClosed PayrollCycle[]  @relation("PayrollCycleProcessedBy")
+  auditLogs           AuditLog[]
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  userRoles           UserRole[]
+
+  @@unique([companyId, email], map: "users_company_id_email_key")
+  @@index([companyId], map: "users_company_id_idx")
+  @@map("users")
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  companyId   String     @map("company_id")
+  key         String
+  name        String
+  description String?
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  company     Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  userRoles   UserRole[]
+
+  @@unique([companyId, key], map: "roles_company_id_key_key")
+  @@index([companyId], map: "roles_company_id_idx")
+  @@map("roles")
+}
+
+model UserRole {
+  id         String   @id @default(cuid())
+  companyId  String   @map("company_id")
+  userId     String   @map("user_id") @db.Uuid
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, roleId], map: "user_roles_company_user_role_key")
+  @@index([companyId], map: "user_roles_company_id_idx")
+  @@index([userId], map: "user_roles_user_id_idx")
+  @@map("user_roles")
+}
+
+model Employee {
+  id                        String                     @id @default(cuid())
+  companyId                 String                     @map("company_id")
+  userId                    String?                    @unique(map: "employees_user_id_key") @map("user_id") @db.Uuid
+  employeeNumber            String                     @map("employee_number")
+  profile                   EmployeeProfile?
+  jobs                      EmployeeJob[]              @relation("EmployeeJobEmployee")
+  managedJobs               EmployeeJob[]              @relation("EmployeeJobManager")
+  compensations             EmployeeCompensation[]
+  documents                 EmployeeDocument[]
+  leaveBalances             EmployeeLeaveBalance[]
+  leaveRequests             LeaveRequest[]
+  leavePolicyAssignments    LeavePolicyAssignment[]
+  payrollInputAdjustments   PayrollInput[]
+  payrollRunItems           PayrollRunItem[]
+  payrollComponentOverrides EmployeePayrollComponent[]
+  managerMappings           EmployeeManagerMap[]       @relation("EmployeeManagerChild")
+  directReports             EmployeeManagerMap[]       @relation("EmployeeManagerParent")
+  createdAt                 DateTime                   @default(now()) @map("created_at")
+  updatedAt                 DateTime                   @updatedAt @map("updated_at")
+  company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user                      AppUser?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, employeeNumber], map: "employees_company_employee_number_key")
+  @@index([companyId], map: "employees_company_id_idx")
+  @@map("employees")
+}
+
+model EmployeeProfile {
+  id            String    @id @default(cuid())
+  employeeId    String    @unique(map: "employee_profiles_employee_id_key") @map("employee_id")
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  preferredName String?   @map("preferred_name")
+  personalEmail String?   @map("personal_email")
+  workEmail     String?   @map("work_email")
+  phone         String?
+  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
+  hireDate      DateTime  @map("hire_date") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([lastName, firstName], map: "employee_profiles_name_idx")
+  @@map("employee_profiles")
+}
+
+model EmployeeJob {
+  id                 String           @id @default(cuid())
+  employeeId         String           @map("employee_id")
+  title              String
+  department         String
+  location           String?
+  employmentType     String           @map("employment_type")
+  status             EmploymentStatus @default(active)
+  managerEmployeeId  String?          @map("manager_employee_id")
+  effectiveFrom      DateTime         @map("effective_from") @db.Date
+  effectiveTo        DateTime?        @map("effective_to") @db.Date
+  isCurrent          Boolean          @default(true) @map("is_current")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  employee           Employee         @relation("EmployeeJobEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  managerEmployeeRef Employee?        @relation("EmployeeJobManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId], map: "employee_jobs_employee_id_idx")
+  @@index([managerEmployeeId], map: "employee_jobs_manager_employee_id_idx")
+  @@index([isCurrent], map: "employee_jobs_is_current_idx")
+  @@map("employee_jobs")
+}
+
+model EmployeeCompensation {
+  id            String    @id @default(cuid())
+  employeeId    String    @map("employee_id")
+  baseSalary    Decimal   @map("base_salary") @db.Decimal(12, 2)
+  currency      String
+  payFrequency  String    @map("pay_frequency")
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  isCurrent     Boolean   @default(true) @map("is_current")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId], map: "employee_compensations_employee_id_idx")
+  @@index([isCurrent], map: "employee_compensations_is_current_idx")
+  @@map("employee_compensations")
+}
+
+model EmployeeDocument {
+  id               String    @id @default(cuid())
+  employeeId       String    @map("employee_id")
+  documentType     String    @map("document_type")
+  title            String
+  storagePath      String    @map("storage_path")
+  storageBucket    String    @map("storage_bucket")
+  visibility       String    @default("private")
+  expiresOn        DateTime? @map("expires_on") @db.Date
+  uploadedByUserId String?   @map("uploaded_by_user_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId], map: "employee_documents_employee_id_idx")
+  @@index([documentType], map: "employee_documents_document_type_idx")
+  @@map("employee_documents")
+}
+
+model EmployeeManagerMap {
+  id                String    @id @default(cuid())
+  employeeId        String    @map("employee_id")
+  managerEmployeeId String    @map("manager_employee_id")
+  effectiveFrom     DateTime  @map("effective_from") @db.Date
+  effectiveTo       DateTime? @map("effective_to") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at")
+  employee          Employee  @relation("EmployeeManagerChild", fields: [employeeId], references: [id], onDelete: Cascade)
+  managerEmployee   Employee  @relation("EmployeeManagerParent", fields: [managerEmployeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId], map: "employee_manager_map_employee_id_idx")
+  @@index([managerEmployeeId], map: "employee_manager_map_manager_employee_id_idx")
+  @@map("employee_manager_map")
+}
+
+model LeaveType {
+  id                 String                   @id @default(cuid())
+  companyId          String                   @map("company_id")
+  code               String
+  name               String
+  unit               String                   @default("days")
+  requiresApproval   Boolean                  @default(true) @map("requires_approval")
+  allowNegative      Boolean                  @default(false) @map("allow_negative")
+  isActive           Boolean                  @default(true) @map("is_active")
+  balances           EmployeeLeaveBalance[]
+  requests           LeaveRequest[]
+  policyEntitlements LeavePolicyEntitlement[]
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  company            Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, code], map: "leave_types_company_code_key")
+  @@index([companyId], map: "leave_types_company_id_idx")
+  @@map("leave_types")
+}
+
+model LeavePolicy {
+  id                String                   @id @default(cuid())
+  companyId         String                   @map("company_id")
+  name              String
+  accrualFrequency  String                   @map("accrual_frequency")
+  accrualStartMonth Int                      @default(1) @map("accrual_start_month")
+  carryForwardLimit Decimal?                 @map("carry_forward_limit") @db.Decimal(10, 2)
+  isActive          Boolean                  @default(true) @map("is_active")
+  assignments       LeavePolicyAssignment[]
+  entitlements      LeavePolicyEntitlement[]
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId], map: "leave_policies_company_id_idx")
+  @@map("leave_policies")
+}
+
+model LeavePolicyEntitlement {
+  id               String      @id @default(cuid())
+  leavePolicyId    String      @map("leave_policy_id")
+  leaveTypeId      String      @map("leave_type_id")
+  annualAllocation Decimal     @map("annual_allocation") @db.Decimal(10, 2)
+  maxCarryForward  Decimal?    @map("max_carry_forward") @db.Decimal(10, 2)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  leavePolicy      LeavePolicy @relation(fields: [leavePolicyId], references: [id], onDelete: Cascade)
+  leaveType        LeaveType   @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([leavePolicyId, leaveTypeId], map: "leave_policy_entitlements_policy_type_key")
+  @@index([leaveTypeId], map: "leave_policy_entitlements_leave_type_id_idx")
+  @@map("leave_policy_entitlements")
+}
+
+model LeavePolicyAssignment {
+  id            String      @id @default(cuid())
+  leavePolicyId String      @map("leave_policy_id")
+  employeeId    String      @map("employee_id")
+  effectiveFrom DateTime    @map("effective_from") @db.Date
+  effectiveTo   DateTime?   @map("effective_to") @db.Date
+  createdAt     DateTime    @default(now()) @map("created_at")
+  leavePolicy   LeavePolicy @relation(fields: [leavePolicyId], references: [id], onDelete: Cascade)
+  employee      Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId], map: "leave_policy_assignments_employee_id_idx")
+  @@index([leavePolicyId], map: "leave_policy_assignments_leave_policy_id_idx")
+  @@map("leave_policy_assignments")
+}
+
+model EmployeeLeaveBalance {
+  id              String    @id @default(cuid())
+  employeeId      String    @map("employee_id")
+  leaveTypeId     String    @map("leave_type_id")
+  balanceYear     Int       @map("balance_year")
+  openingBalance  Decimal   @default(0) @map("opening_balance") @db.Decimal(10, 2)
+  accruedAmount   Decimal   @default(0) @map("accrued_amount") @db.Decimal(10, 2)
+  usedAmount      Decimal   @default(0) @map("used_amount") @db.Decimal(10, 2)
+  pendingAmount   Decimal   @default(0) @map("pending_amount") @db.Decimal(10, 2)
+  adjustedAmount  Decimal   @default(0) @map("adjusted_amount") @db.Decimal(10, 2)
+  availableAmount Decimal   @default(0) @map("available_amount") @db.Decimal(10, 2)
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType       LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, leaveTypeId, balanceYear], map: "employee_leave_balances_emp_type_year_key")
+  @@index([employeeId], map: "employee_leave_balances_employee_id_idx")
+  @@index([leaveTypeId], map: "employee_leave_balances_leave_type_id_idx")
+  @@map("employee_leave_balances")
+}
+
+model LeaveRequest {
+  id            String             @id @default(cuid())
+  employeeId    String             @map("employee_id")
+  leaveTypeId   String             @map("leave_type_id")
+  requestedById String?            @map("requested_by_id") @db.Uuid
+  startDate     DateTime           @map("start_date") @db.Date
+  endDate       DateTime           @map("end_date") @db.Date
+  quantity      Decimal            @db.Decimal(10, 2)
+  reason        String?
+  status        LeaveRequestStatus @default(pending)
+  decidedAt     DateTime?          @map("decided_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  employee      Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType     LeaveType          @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  requestedBy   AppUser?           @relation("LeaveRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvals     LeaveApproval[]
+
+  @@index([employeeId], map: "leave_requests_employee_id_idx")
+  @@index([status], map: "leave_requests_status_idx")
+  @@index([startDate, endDate], map: "leave_requests_date_range_idx")
+  @@map("leave_requests")
+}
+
+model LeaveApproval {
+  id             String                @id @default(cuid())
+  leaveRequestId String                @map("leave_request_id")
+  approverId     String                @map("approver_id") @db.Uuid
+  decision       LeaveApprovalDecision
+  comments       String?
+  decidedAt      DateTime              @default(now()) @map("decided_at")
+  leaveRequest   LeaveRequest          @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  approver       AppUser               @relation(fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@index([leaveRequestId], map: "leave_approvals_leave_request_id_idx")
+  @@index([approverId], map: "leave_approvals_approver_id_idx")
+  @@map("leave_approvals")
+}
+
+model HolidayCalendar {
+  id        String    @id @default(cuid())
+  companyId String    @map("company_id")
+  name      String
+  region    String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  holidays  Holiday[]
+
+  @@index([companyId], map: "holiday_calendars_company_id_idx")
+  @@map("holiday_calendars")
+}
+
+model Holiday {
+  id                String          @id @default(cuid())
+  holidayCalendarId String          @map("holiday_calendar_id")
+  holidayDate       DateTime        @map("holiday_date") @db.Date
+  name              String
+  isOptional        Boolean         @default(false) @map("is_optional")
+  holidayCalendar   HolidayCalendar @relation(fields: [holidayCalendarId], references: [id], onDelete: Cascade)
+
+  @@unique([holidayCalendarId, holidayDate], map: "holidays_calendar_date_key")
+  @@index([holidayDate], map: "holidays_holiday_date_idx")
+  @@map("holidays")
+}
+
+model PayrollCycle {
+  id            String             @id @default(cuid())
+  companyId     String             @map("company_id")
+  name          String
+  periodStart   DateTime           @map("period_start") @db.Date
+  periodEnd     DateTime           @map("period_end") @db.Date
+  payDate       DateTime           @map("pay_date") @db.Date
+  status        PayrollCycleStatus @default(draft)
+  processedById String?            @map("processed_by_id") @db.Uuid
+  finalizedAt   DateTime?          @map("finalized_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  processedBy   AppUser?           @relation("PayrollCycleProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+  payrollRuns   PayrollRun[]
+  payrollInputs PayrollInput[]
+
+  @@unique([companyId, periodStart, periodEnd], map: "payroll_cycles_company_period_key")
+  @@index([companyId], map: "payroll_cycles_company_id_idx")
+  @@index([status], map: "payroll_cycles_status_idx")
+  @@map("payroll_cycles")
+}
+
+model PayrollComponent {
+  id             String                     @id @default(cuid())
+  companyId      String                     @map("company_id")
+  code           String
+  name           String
+  componentType  PayrollComponentType       @map("component_type")
+  isTaxable      Boolean                    @default(false) @map("is_taxable")
+  valueType      PayrollValueType           @default(fixed) @map("value_type")
+  defaultValue   Decimal?                   @map("default_value") @db.Decimal(12, 2)
+  isActive       Boolean                    @default(true) @map("is_active")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+  company        Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employeeValues EmployeePayrollComponent[]
+  runItemValues  PayrollRunItemComponent[]
+
+  @@unique([companyId, code], map: "payroll_components_company_code_key")
+  @@index([companyId], map: "payroll_components_company_id_idx")
+  @@map("payroll_components")
+}
+
+model EmployeePayrollComponent {
+  id                 String           @id @default(cuid())
+  employeeId         String           @map("employee_id")
+  payrollComponentId String           @map("payroll_component_id")
+  valueType          PayrollValueType @default(fixed) @map("value_type")
+  value              Decimal          @db.Decimal(12, 2)
+  effectiveFrom      DateTime         @map("effective_from") @db.Date
+  effectiveTo        DateTime?        @map("effective_to") @db.Date
+  isActive           Boolean          @default(true) @map("is_active")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  employee           Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollComponent   PayrollComponent @relation(fields: [payrollComponentId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId], map: "employee_payroll_components_employee_id_idx")
+  @@index([payrollComponentId], map: "employee_payroll_components_component_id_idx")
+  @@map("employee_payroll_components")
+}
+
+model PayrollInput {
+  id             String       @id @default(cuid())
+  payrollCycleId String       @map("payroll_cycle_id")
+  employeeId     String       @map("employee_id")
+  inputType      String       @map("input_type")
+  amount         Decimal      @db.Decimal(12, 2)
+  notes          String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  payrollCycle   PayrollCycle @relation(fields: [payrollCycleId], references: [id], onDelete: Cascade)
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([payrollCycleId], map: "payroll_inputs_payroll_cycle_id_idx")
+  @@index([employeeId], map: "payroll_inputs_employee_id_idx")
+  @@map("payroll_inputs")
+}
+
+model PayrollRun {
+  id              String           @id @default(cuid())
+  companyId       String           @map("company_id")
+  payrollCycleId  String           @map("payroll_cycle_id")
+  status          PayrollRunStatus @default(draft)
+  processedById   String?          @map("processed_by_id") @db.Uuid
+  processingNotes String?          @map("processing_notes")
+  startedAt       DateTime?        @map("started_at")
+  completedAt     DateTime?        @map("completed_at")
+  finalizedAt     DateTime?        @map("finalized_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payrollCycle    PayrollCycle     @relation(fields: [payrollCycleId], references: [id], onDelete: Restrict)
+  processedBy     AppUser?         @relation("PayrollRunProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+  items           PayrollRunItem[]
+
+  @@index([companyId], map: "payroll_runs_company_id_idx")
+  @@index([payrollCycleId], map: "payroll_runs_payroll_cycle_id_idx")
+  @@index([status], map: "payroll_runs_status_idx")
+  @@map("payroll_runs")
+}
+
+model PayrollRunItem {
+  id               String                    @id @default(cuid())
+  payrollRunId     String                    @map("payroll_run_id")
+  employeeId       String                    @map("employee_id")
+  grossAmount      Decimal                   @map("gross_amount") @db.Decimal(12, 2)
+  totalDeductions  Decimal                   @map("total_deductions") @db.Decimal(12, 2)
+  netAmount        Decimal                   @map("net_amount") @db.Decimal(12, 2)
+  currency         String
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  payrollRun       PayrollRun                @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee         Employee                  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  componentAmounts PayrollRunItemComponent[]
+  payslip          Payslip?
+
+  @@unique([payrollRunId, employeeId], map: "payroll_run_items_run_employee_key")
+  @@index([payrollRunId], map: "payroll_run_items_payroll_run_id_idx")
+  @@index([employeeId], map: "payroll_run_items_employee_id_idx")
+  @@map("payroll_run_items")
+}
+
+model PayrollRunItemComponent {
+  id                 String           @id @default(cuid())
+  payrollRunItemId   String           @map("payroll_run_item_id")
+  payrollComponentId String           @map("payroll_component_id")
+  amount             Decimal          @db.Decimal(12, 2)
+  createdAt          DateTime         @default(now()) @map("created_at")
+  payrollRunItem     PayrollRunItem   @relation(fields: [payrollRunItemId], references: [id], onDelete: Cascade)
+  payrollComponent   PayrollComponent @relation(fields: [payrollComponentId], references: [id], onDelete: Restrict)
+
+  @@index([payrollRunItemId], map: "payroll_run_item_components_item_id_idx")
+  @@index([payrollComponentId], map: "payroll_run_item_components_component_id_idx")
+  @@map("payroll_run_item_components")
+}
+
+model Payslip {
+  id               String         @id @default(cuid())
+  payrollRunItemId String         @unique(map: "payslips_payroll_run_item_id_key") @map("payroll_run_item_id")
+  publishedAt      DateTime?      @map("published_at")
+  storagePath      String?        @map("storage_path")
+  storageBucket    String?        @map("storage_bucket")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  payrollRunItem   PayrollRunItem @relation(fields: [payrollRunItemId], references: [id], onDelete: Cascade)
+
+  @@map("payslips")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  companyId   String   @map("company_id")
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  action      String
+  payload     Json?
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  actorUser   AppUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId], map: "audit_logs_company_id_idx")
+  @@index([actorUserId], map: "audit_logs_actor_user_id_idx")
+  @@index([entityType, entityId], map: "audit_logs_entity_lookup_idx")
+  @@map("audit_logs")
+}
